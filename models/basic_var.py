@@ -90,9 +90,19 @@ class SelfAttention(nn.Module):
     def forward(self, x, attn_bias):
         B, L, C = x.shape
         
-        qkv = F.linear(input=x, weight=self.mat_qkv.weight, bias=torch.cat((self.q_bias, self.zero_k_bias, self.v_bias))).view(B, L, 3, self.num_heads, self.head_dim)
-        main_type = qkv.dtype
+        #qkv = F.linear(input=x, weight=self.mat_qkv.weight, bias=torch.cat((self.q_bias, self.zero_k_bias, self.v_bias))).view(B, L, 3, self.num_heads, self.head_dim)
+        #main_type = qkv.dtype
         # qkv: BL3Hc
+
+        qkv_after_lora_proj = self.mat_qkv(x)
+        q_intermediate, k_intermediate, v_intermediate = torch.chunk(qkv_after_lora_proj, 3, dim=-1)
+        q_biased = q_intermediate + self.q_bias.view(1, 1, -1)
+        k_biased = k_intermediate
+        v_biased = v_intermediate + self.v_bias.view(1, 1, -1)
+
+        qkv_with_custom_biases = torch.cat((q_biased, k_biased, v_biased), dim=-1)
+
+        qkv = qkv_with_custom_biases.view(B, L, 3, self.num_heads, self.head_dim)
         
         using_flash = self.using_flash and attn_bias is None and qkv.dtype != torch.float32
         if using_flash or self.using_xform: q, k, v = qkv.unbind(dim=2); dim_cat = 1   # q or k or v: BLHc
