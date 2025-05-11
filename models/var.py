@@ -140,6 +140,8 @@ class VAR(nn.Module):
         :param more_smooth: smoothing the pred using gumbel softmax; only used in visualization, not used in FID/IS benchmarking
         :return: if returns_vemb: list of embedding h_BChw := vae_embed(idx_Bl), else: list of idx_Bl
         """
+
+        self.kv_mem_usages: List[float] = []
         if g_seed is None: rng = None
         else: self.rng.manual_seed(g_seed); rng = self.rng
         
@@ -185,7 +187,18 @@ class VAR(nn.Module):
                 next_token_map = next_token_map.view(B, self.Cvae, -1).transpose(1, 2)
                 next_token_map = self.word_embed(next_token_map) + lvl_pos[:, cur_L:cur_L + self.patch_nums[si+1] ** 2]
                 next_token_map = next_token_map.repeat(2, 1, 1)   # double the batch sizes due to CFG
-        
+
+            total_bytes = 0
+            for blk in self.blocks:
+                attn = blk.attn
+                if attn.caching and attn.cached_k is not None:
+                    total_bytes += (
+                        attn.cached_k.element_size() * attn.cached_k.nelement()
+                        + attn.cached_v.element_size() * attn.cached_v.nelement()
+                    )
+            # convert to kilobytes
+            self.kv_mem_usages.append(total_bytes / 1024)
+            
         for b in self.blocks: b.attn.kv_caching(False)
         return self.vae_proxy[0].fhat_to_img(f_hat).add_(1).mul_(0.5)   # de-normalize, from [-1, 1] to [0, 1]
     
