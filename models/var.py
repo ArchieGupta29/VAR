@@ -1,7 +1,7 @@
 import math
 from functools import partial
 from typing import Optional, Tuple, Union
-
+import time
 import torch
 import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin
@@ -142,6 +142,7 @@ class VAR(nn.Module):
         """
 
         self.kv_mem_usages: List[float] = []
+        self.step_times: List[float] = []
         if g_seed is None: rng = None
         else: self.rng.manual_seed(g_seed); rng = self.rng
         
@@ -160,6 +161,7 @@ class VAR(nn.Module):
         
         for b in self.blocks: b.attn.kv_caching(True)
         for si, pn in enumerate(self.patch_nums):   # si: i-th segment
+            t0 = time.time()
             ratio = si / self.num_stages_minus_1
             # last_L = cur_L
             cur_L += pn*pn
@@ -198,6 +200,10 @@ class VAR(nn.Module):
                     )
             # convert to kilobytes
             self.kv_mem_usages.append(total_bytes / 1024)
+            t1 = time.time()
+            self.step_times.append(t1 - t0)
+
+        
             
         for b in self.blocks: b.attn.kv_caching(False)
         return self.vae_proxy[0].fhat_to_img(f_hat).add_(1).mul_(0.5)   # de-normalize, from [-1, 1] to [0, 1]
