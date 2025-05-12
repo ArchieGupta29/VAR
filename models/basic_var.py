@@ -74,7 +74,7 @@ class SelfAttention(nn.Module):
         self.mat_qkv = nn.Linear(embed_dim, embed_dim * 3, bias=False)
         self.q_bias, self.v_bias = nn.Parameter(torch.zeros(embed_dim)), nn.Parameter(torch.zeros(embed_dim))
         self.register_buffer('zero_k_bias', torch.zeros(embed_dim))
-        
+        self.use_quant_proj = False
         self.proj = nn.Linear(embed_dim, embed_dim)
         self.proj_drop = nn.Dropout(proj_drop, inplace=True) if proj_drop > 0 else nn.Identity()
         self.attn_drop: float = attn_drop
@@ -85,7 +85,7 @@ class SelfAttention(nn.Module):
         self.caching, self.cached_k, self.cached_v = False, None, None
     
     def kv_caching(self, enable: bool): self.caching, self.cached_k, self.cached_v = enable, None, None
-    self.use_quant_proj = False
+    
     # NOTE: attn_bias is None during inference because kv cache is enabled
     def forward(self, x, attn_bias):
         B, L, C = x.shape
